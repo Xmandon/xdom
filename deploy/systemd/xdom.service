@@ -1,0 +1,17 @@
+[Unit]
+Description=xdom web service
+After=network.target
+
+[Service]
+Type=simple
+User=app
+WorkingDirectory=/opt/xdom
+EnvironmentFile=/opt/xdom/conf/config.env
+ExecStart=/opt/xdom/bin/xdom
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/xdom/stdout.log
+StandardError=append:/var/log/xdom/stderr.log
+
+[Install]
+WantedBy=multi-user.target
