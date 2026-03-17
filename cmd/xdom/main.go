@@ -1,18 +1,27 @@
 package main
 
 import (
-	"log"
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/Xmandon/xdom/internal/app"
 )
 
 func main() {
 	cfg := app.LoadConfigFromEnv()
-	server := app.NewServer(cfg)
-	log.Printf("starting %s on %s", cfg.ServiceName, cfg.ListenAddr)
-	if err := server.ListenAndServe(); err != nil {
-		log.Printf("server stopped: %v", err)
+	application, err := app.New(cfg)
+	if err != nil {
+		app.LogStartupError(err)
+		os.Exit(1)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := application.Run(ctx); err != nil {
+		app.LogStartupError(err)
 		os.Exit(1)
 	}
 }
