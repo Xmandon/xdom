@@ -58,8 +58,6 @@ go run ./cmd/xdom
 ```bash
 chmod +x scripts/deploy_binary.sh
 
-DEPLOY_HOST="your-cvm-ip" \
-DEPLOY_USER="your-ssh-user" \
 DEPLOY_DIR="/opt/xdom" \
 SERVICE_NAME="xdom" \
 LOCAL_BINARY="xdom" \
@@ -68,5 +66,7 @@ LOCAL_SYSTEMD_FILE="deploy/systemd/xdom.service" \
 HEALTHCHECK_URL="http://127.0.0.1:8080/healthz" \
 bash scripts/deploy_binary.sh
 ```
+
+这个脚本适用于“蓝盾流水线就在目标 CVM 本机执行部署”的场景，因此不再需要 `DEPLOY_HOST` 和 `DEPLOY_USER`。
 
 如果你的流水线构建产物不是当前目录下的 `xdom`，把 `LOCAL_BINARY` 改成实际产物路径即可。
