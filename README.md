@@ -52,3 +52,21 @@ go run ./cmd/xdom
 - `deploy/config.env.example`
 - `deploy/systemd/xdom.service`
 - `scripts/deploy_binary.sh`
+
+流水线里推荐这样调用：
+
+```bash
+chmod +x scripts/deploy_binary.sh
+
+DEPLOY_HOST="your-cvm-ip" \
+DEPLOY_USER="your-ssh-user" \
+DEPLOY_DIR="/opt/xdom" \
+SERVICE_NAME="xdom" \
+LOCAL_BINARY="xdom" \
+LOCAL_ENV_FILE="deploy/config.env.example" \
+LOCAL_SYSTEMD_FILE="deploy/systemd/xdom.service" \
+HEALTHCHECK_URL="http://127.0.0.1:8080/healthz" \
+bash scripts/deploy_binary.sh
+```
+
+如果你的流水线构建产物不是当前目录下的 `xdom`，把 `LOCAL_BINARY` 改成实际产物路径即可。
