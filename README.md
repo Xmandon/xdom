@@ -69,4 +69,6 @@ bash scripts/deploy_binary.sh
 
 这个脚本适用于“蓝盾流水线就在目标 CVM 本机执行部署”的场景，因此不再需要 `DEPLOY_HOST` 和 `DEPLOY_USER`。
 
+当前这版默认以 `root` 用户执行部署和启动服务，因此脚本里也不再调用 `sudo`。
+
 如果你的流水线构建产物不是当前目录下的 `xdom`，把 `LOCAL_BINARY` 改成实际产物路径即可。

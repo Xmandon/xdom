@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=app
+User=root
 WorkingDirectory=/opt/xdom
 EnvironmentFile=/opt/xdom/conf/config.env
 ExecStart=/opt/xdom/bin/xdom

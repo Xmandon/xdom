@@ -21,7 +21,7 @@ HEALTHCHECK_INTERVAL_SEC="${HEALTHCHECK_INTERVAL_SEC:-5}"
 
 echo "[1/6] preparing local deployment directories under ${DEPLOY_DIR}"
 mkdir -p "${DEPLOY_BIN_DIR}" "${DEPLOY_CONF_DIR}" "${DEPLOY_RELEASE_DIR}" "${DEPLOY_BACKUP_DIR}"
-sudo mkdir -p "${DEPLOY_LOG_DIR}"
+mkdir -p "${DEPLOY_LOG_DIR}"
 
 echo "[2/6] backing up previous binary if present"
 if [[ -f "${DEPLOY_BINARY_PATH}" ]]; then
@@ -39,13 +39,13 @@ fi
 
 if [[ -n "${LOCAL_SYSTEMD_FILE}" ]]; then
   echo "[4/6] installing systemd unit"
-  sudo cp "${LOCAL_SYSTEMD_FILE}" "${SYSTEMD_UNIT_PATH}"
+  cp "${LOCAL_SYSTEMD_FILE}" "${SYSTEMD_UNIT_PATH}"
 fi
 
 echo "[5/6] restarting service"
-sudo systemctl daemon-reload
-sudo systemctl enable "${SERVICE_NAME}.service"
-sudo systemctl restart "${SERVICE_NAME}.service"
+systemctl daemon-reload
+systemctl enable "${SERVICE_NAME}.service"
+systemctl restart "${SERVICE_NAME}.service"
 
 echo "[6/6] verifying health endpoint ${HEALTHCHECK_URL}"
 for ((i=1; i<=HEALTHCHECK_RETRIES; i++)); do
@@ -59,5 +59,5 @@ for ((i=1; i<=HEALTHCHECK_RETRIES; i++)); do
 done
 
 echo "deployment failed: health check did not pass"
-sudo systemctl status "${SERVICE_NAME}.service" --no-pager || true
+systemctl status "${SERVICE_NAME}.service" --no-pager || true
 exit 1
