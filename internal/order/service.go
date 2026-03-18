@@ -100,6 +100,8 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 				slog.String("order_id", rec.ID),
 				slog.String("sku", rec.SKU),
 				slog.String("fault_mode", string(faults.InventoryConflict)),
+				slog.String("error_code", "inventory_conflict"),
+				slog.String("code_location", "internal/order/service.go:CreateOrder"),
 			}, telemetry.TraceLogAttrs(ctx)...)
 			s.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "inventory conflict detected", attrs...)
 		}
@@ -122,6 +124,8 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 				slog.String("order_id", rec.ID),
 				slog.String("status", rec.Status),
 				slog.String("fault_mode", string(mode)),
+				slog.String("error_code", "payment_timeout"),
+				slog.String("code_location", "internal/order/service.go:CreateOrder"),
 			}, telemetry.TraceLogAttrs(ctx)...)
 			s.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "order left pending after payment timeout", attrs...)
 			return toResponse(rec), nil
@@ -143,6 +147,8 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 			slog.String("status", rec.Status),
 			slog.String("error", err.Error()),
 			slog.String("fault_mode", string(mode)),
+			slog.String("error_code", "order_payment_failed"),
+			slog.String("code_location", "internal/order/service.go:CreateOrder"),
 		}, telemetry.TraceLogAttrs(ctx)...)
 		s.cfg.Logger.LogAttrs(ctx, slog.LevelError, "order payment failed", attrs...)
 		return toResponse(rec), err
@@ -160,6 +166,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 		slog.String("order_id", rec.ID),
 		slog.String("status", rec.Status),
 		slog.String("payment_channel", rec.PaymentChannel),
+		slog.String("code_location", "internal/order/service.go:CreateOrder"),
 	}, telemetry.TraceLogAttrs(ctx)...)
 	s.cfg.Logger.LogAttrs(ctx, slog.LevelInfo, "order created", attrs...)
 	return toResponse(rec), nil
@@ -186,6 +193,7 @@ func (s *Service) CancelOrder(ctx context.Context, orderID string, reason string
 	attrs := append([]slog.Attr{
 		slog.String("order_id", orderID),
 		slog.String("reason", reason),
+		slog.String("code_location", "internal/order/service.go:CancelOrder"),
 	}, telemetry.TraceLogAttrs(ctx)...)
 	s.cfg.Logger.LogAttrs(ctx, slog.LevelInfo, "order cancelled", attrs...)
 	rec, err := s.cfg.Repository.GetOrder(ctx, orderID)
@@ -212,6 +220,13 @@ func (s *Service) CancelExpiredOrders(ctx context.Context) error {
 		if err := s.cfg.Repository.CancelOrder(ctx, rec.ID, "expired"); err != nil {
 			s.cfg.Metrics.RecordWorkerFailed(ctx, "cancel_expired_failed")
 			span.RecordError(err)
+			attrs := append([]slog.Attr{
+				slog.String("order_id", rec.ID),
+				slog.String("error", err.Error()),
+				slog.String("error_code", "cancel_expired_failed"),
+				slog.String("code_location", "internal/order/service.go:CancelExpiredOrders"),
+			}, telemetry.TraceLogAttrs(ctx)...)
+			s.cfg.Logger.LogAttrs(ctx, slog.LevelError, "worker failed to cancel expired order", attrs...)
 			return err
 		}
 		s.cfg.Metrics.RecordOrderCancelled(ctx, "expired")

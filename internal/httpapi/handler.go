@@ -221,7 +221,11 @@ func (h *Handler) handleFault(_ http.ResponseWriter, r *http.Request) (int, any)
 	h.cfg.Metrics.RecordFaultActivation(r.Context(), string(req.Mode))
 	currentSpan := oteltrace.SpanFromContext(r.Context())
 	currentSpan.SetAttributes(attribute.String("fault.mode", string(req.Mode)))
-	attrs := append([]slog.Attr{slog.String("fault_mode", string(req.Mode))}, telemetry.TraceLogAttrs(r.Context())...)
+	attrs := append([]slog.Attr{
+		slog.String("fault_mode", string(req.Mode)),
+		slog.String("error_code", "fault_mode_updated"),
+		slog.String("code_location", "internal/httpapi/handler.go:handleFault"),
+	}, telemetry.TraceLogAttrs(r.Context())...)
 	h.cfg.Logger.LogAttrs(r.Context(), slog.LevelWarn, "fault mode updated", attrs...)
 	return http.StatusOK, map[string]any{"status": "updated", "mode": req.Mode, "delay_ms": req.DelayMS}
 }

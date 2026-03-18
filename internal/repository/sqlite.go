@@ -142,6 +142,18 @@ func (r *SQLiteRepository) CreatePendingOrder(ctx context.Context, order OrderRe
 	if err := r.maybeDelayOrFailWrite(); err != nil {
 		_ = r.releaseInventory(ctx, order.SKU, order.Quantity)
 		span.RecordError(err)
+		mode, _ := r.faults.Get()
+		if mode == faults.DBWriteError {
+			attrs := append([]slog.Attr{
+				slog.String("order_id", order.ID),
+				slog.String("sku", order.SKU),
+				slog.String("fault_mode", string(mode)),
+				slog.String("error_code", "db_write_error"),
+				slog.String("code_location", "internal/repository/sqlite.go:CreatePendingOrder"),
+				slog.String("error", err.Error()),
+			}, telemetry.TraceLogAttrs(ctx)...)
+			r.logger.LogAttrs(ctx, slog.LevelError, "db write error injected", attrs...)
+		}
 		return err
 	}
 	_, err := r.db.ExecContext(
@@ -174,6 +186,18 @@ func (r *SQLiteRepository) UpdateOrderStatus(ctx context.Context, orderID string
 
 	if err := r.maybeDelayOrFailWrite(); err != nil {
 		span.RecordError(err)
+		mode, _ := r.faults.Get()
+		if mode == faults.DBWriteError {
+			attrs := append([]slog.Attr{
+				slog.String("order_id", orderID),
+				slog.String("status", status),
+				slog.String("fault_mode", string(mode)),
+				slog.String("error_code", "db_write_error"),
+				slog.String("code_location", "internal/repository/sqlite.go:UpdateOrderStatus"),
+				slog.String("error", err.Error()),
+			}, telemetry.TraceLogAttrs(ctx)...)
+			r.logger.LogAttrs(ctx, slog.LevelError, "db write error injected", attrs...)
+		}
 		return err
 	}
 	_, err := r.db.ExecContext(
@@ -302,6 +326,8 @@ func (r *SQLiteRepository) reserveInventory(ctx context.Context, sku string, qty
 			slog.String("sku", sku),
 			slog.Int("quantity", qty),
 			slog.String("fault_mode", string(mode)),
+			slog.String("error_code", "inventory_conflict"),
+			slog.String("code_location", "internal/repository/sqlite.go:reserveInventory"),
 		}, telemetry.TraceLogAttrs(ctx)...)
 		r.logger.LogAttrs(ctx, slog.LevelWarn, "inventory conflict injected", attrs...)
 		return ErrInventoryConflict

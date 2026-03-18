@@ -60,6 +60,8 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 			slog.String("order_id", orderID),
 			slog.String("payment_channel", channel),
 			slog.String("fault_mode", string(mode)),
+			slog.String("error_code", "payment_timeout"),
+			slog.String("code_location", "internal/payment/client.go:Charge"),
 			slog.String("error", ErrTimeout.Error()),
 		}, telemetry.TraceLogAttrs(ctx)...)
 		c.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "payment timeout injected", attrs...)
@@ -73,6 +75,8 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 			slog.String("order_id", orderID),
 			slog.String("payment_channel", channel),
 			slog.String("fault_mode", string(mode)),
+			slog.String("error_code", "payment_charge_failed"),
+			slog.String("code_location", "internal/payment/client.go:Charge"),
 			slog.String("error", ErrCharge.Error()),
 		}, telemetry.TraceLogAttrs(ctx)...)
 		c.cfg.Logger.LogAttrs(ctx, slog.LevelError, "payment charge failed", attrs...)
@@ -81,6 +85,7 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 		attrs := append([]slog.Attr{
 			slog.String("order_id", orderID),
 			slog.String("payment_channel", channel),
+			slog.String("code_location", "internal/payment/client.go:Charge"),
 		}, telemetry.TraceLogAttrs(ctx)...)
 		c.cfg.Logger.LogAttrs(ctx, slog.LevelInfo, "payment charged", attrs...)
 		return nil

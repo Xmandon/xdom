@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"time"
 
 	"github.com/Xmandon/xdom/internal/faults"
@@ -61,6 +62,9 @@ func (r *Runner) runOnce(ctx context.Context) {
 			attrs := append([]slog.Attr{
 				slog.Any("panic", recovered),
 				slog.String("fault_mode", string(faults.WorkerPanic)),
+				slog.String("error_code", "worker_panic"),
+				slog.String("code_location", "internal/worker/runner.go:runOnce"),
+				slog.String("stack_trace", string(debug.Stack())),
 			}, telemetry.TraceLogAttrs(ctx)...)
 			r.cfg.Logger.LogAttrs(ctx, slog.LevelError, "worker panic recovered", attrs...)
 			r.cfg.Metrics.RecordWorkerFailed(ctx, "panic_recovered")
@@ -76,7 +80,11 @@ func (r *Runner) runOnce(ctx context.Context) {
 	}
 
 	if err := r.cfg.Service.CancelExpiredOrders(ctx); err != nil {
-		attrs := append([]slog.Attr{slog.String("error", err.Error())}, telemetry.TraceLogAttrs(ctx)...)
+		attrs := append([]slog.Attr{
+			slog.String("error", err.Error()),
+			slog.String("error_code", "worker_job_failed"),
+			slog.String("code_location", "internal/worker/runner.go:runOnce"),
+		}, telemetry.TraceLogAttrs(ctx)...)
 		r.cfg.Logger.LogAttrs(ctx, slog.LevelError, "worker failed", attrs...)
 		r.cfg.Metrics.RecordWorkerFailed(ctx, "cancel_expired")
 		span.RecordError(err)

@@ -143,3 +143,4 @@ bash scripts/deploy_binary.sh
 接入蓝鲸观测后的验证建议见：
 
 - `docs/blueking_validation.md`
+- `docs/blueking_log_alerting.md`
