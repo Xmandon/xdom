@@ -10,6 +10,7 @@ import (
 	"github.com/Xmandon/xdom/internal/payment"
 	"github.com/Xmandon/xdom/internal/repository"
 	"github.com/Xmandon/xdom/internal/telemetry"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
@@ -88,6 +89,20 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 	if err := s.cfg.Repository.CreatePendingOrder(ctx, rec); err != nil {
 		s.cfg.Metrics.RecordInventoryFailure(ctx, err.Error())
 		span.RecordError(err)
+		if err == repository.ErrInventoryConflict {
+			span.SetAttributes(attribute.String("fault.mode", string(faults.InventoryConflict)))
+			span.SetStatus(codes.Error, "inventory_conflict")
+			span.AddEvent("fault.detected", oteltrace.WithAttributes(
+				attribute.String("fault.mode", string(faults.InventoryConflict)),
+				attribute.String("inventory.sku", rec.SKU),
+			))
+			attrs := append([]slog.Attr{
+				slog.String("order_id", rec.ID),
+				slog.String("sku", rec.SKU),
+				slog.String("fault_mode", string(faults.InventoryConflict)),
+			}, telemetry.TraceLogAttrs(ctx)...)
+			s.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "inventory conflict detected", attrs...)
+		}
 		return OrderResponse{}, err
 	}
 
@@ -95,7 +110,13 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 		span.RecordError(err)
 		mode, _ := s.cfg.Faults.Get()
 		if mode == faults.PaymentTimeout {
-			span.AddEvent("payment left order pending for worker reconciliation")
+			span.SetAttributes(attribute.String("fault.mode", string(mode)))
+			span.SetStatus(codes.Error, err.Error())
+			span.AddEvent("fault.detected", oteltrace.WithAttributes(
+				attribute.String("fault.mode", string(mode)),
+				attribute.String("order.id", rec.ID),
+				attribute.String("outcome", "pending_for_reconciliation"),
+			))
 			s.cfg.Metrics.RecordPaymentTimeout(ctx)
 			attrs := append([]slog.Attr{
 				slog.String("order_id", rec.ID),
@@ -105,6 +126,14 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 			s.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "order left pending after payment timeout", attrs...)
 			return toResponse(rec), nil
 		}
+		if mode == faults.PaymentError {
+			span.SetAttributes(attribute.String("fault.mode", string(mode)))
+			span.SetStatus(codes.Error, err.Error())
+			span.AddEvent("fault.detected", oteltrace.WithAttributes(
+				attribute.String("fault.mode", string(mode)),
+				attribute.String("order.id", rec.ID),
+			))
+		}
 		s.cfg.Metrics.RecordPaymentFailure(ctx, err.Error())
 		_ = s.cfg.Repository.CancelOrder(ctx, rec.ID, "payment_failed")
 		rec.Status = "failed"
@@ -113,6 +142,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 			slog.String("order_id", rec.ID),
 			slog.String("status", rec.Status),
 			slog.String("error", err.Error()),
+			slog.String("fault_mode", string(mode)),
 		}, telemetry.TraceLogAttrs(ctx)...)
 		s.cfg.Logger.LogAttrs(ctx, slog.LevelError, "order payment failed", attrs...)
 		return toResponse(rec), err

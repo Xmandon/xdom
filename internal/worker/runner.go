@@ -2,12 +2,15 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/Xmandon/xdom/internal/faults"
 	"github.com/Xmandon/xdom/internal/order"
 	"github.com/Xmandon/xdom/internal/telemetry"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -47,7 +50,18 @@ func (r *Runner) runOnce(ctx context.Context) {
 	defer span.End()
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			attrs := append([]slog.Attr{slog.Any("panic", recovered)}, telemetry.TraceLogAttrs(ctx)...)
+			err := fmt.Errorf("worker panic injected: %v", recovered)
+			span.RecordError(err)
+			span.SetAttributes(attribute.String("fault.mode", string(faults.WorkerPanic)))
+			span.SetStatus(codes.Error, "worker_panic")
+			span.AddEvent("panic.recovered", oteltrace.WithAttributes(
+				attribute.String("fault.mode", string(faults.WorkerPanic)),
+				attribute.String("panic.message", fmt.Sprint(recovered)),
+			))
+			attrs := append([]slog.Attr{
+				slog.Any("panic", recovered),
+				slog.String("fault_mode", string(faults.WorkerPanic)),
+			}, telemetry.TraceLogAttrs(ctx)...)
 			r.cfg.Logger.LogAttrs(ctx, slog.LevelError, "worker panic recovered", attrs...)
 			r.cfg.Metrics.RecordWorkerFailed(ctx, "panic_recovered")
 		}
@@ -55,6 +69,8 @@ func (r *Runner) runOnce(ctx context.Context) {
 
 	mode, _ := r.cfg.Faults.Get()
 	if mode == faults.WorkerPanic {
+		span.SetAttributes(attribute.String("fault.mode", string(mode)))
+		span.AddEvent("fault.injected", oteltrace.WithAttributes(attribute.String("fault.mode", string(mode))))
 		r.cfg.Metrics.RecordWorkerFailed(ctx, "panic")
 		panic("worker panic injected")
 	}

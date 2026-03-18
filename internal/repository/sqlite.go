@@ -14,6 +14,7 @@ import (
 
 	"github.com/Xmandon/xdom/internal/faults"
 	"github.com/Xmandon/xdom/internal/telemetry"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
@@ -290,6 +291,19 @@ func (r *SQLiteRepository) reserveInventory(ctx context.Context, sku string, qty
 	}
 	mode, _ := r.faults.Get()
 	if mode == faults.InventoryConflict {
+		span.SetAttributes(attribute.String("fault.mode", string(mode)))
+		span.RecordError(ErrInventoryConflict)
+		span.SetStatus(codes.Error, "inventory_conflict")
+		span.AddEvent("fault.injected", oteltrace.WithAttributes(
+			attribute.String("fault.mode", string(mode)),
+			attribute.String("inventory.sku", sku),
+		))
+		attrs := append([]slog.Attr{
+			slog.String("sku", sku),
+			slog.Int("quantity", qty),
+			slog.String("fault_mode", string(mode)),
+		}, telemetry.TraceLogAttrs(ctx)...)
+		r.logger.LogAttrs(ctx, slog.LevelWarn, "inventory conflict injected", attrs...)
 		return ErrInventoryConflict
 	}
 

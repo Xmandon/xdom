@@ -119,7 +119,6 @@ chmod +x scripts/deploy_binary.sh
 DEPLOY_DIR="/opt/xdom" \
 SERVICE_NAME="xdom" \
 LOCAL_BINARY="xdom" \
-LOCAL_ENV_FILE="deploy/config.env.example" \
 LOCAL_SYSTEMD_FILE="deploy/systemd/xdom.service" \
 HEALTHCHECK_URL="http://127.0.0.1:8080/healthz" \
 bash scripts/deploy_binary.sh
@@ -132,6 +131,10 @@ bash scripts/deploy_binary.sh
 重新部署时，脚本会先停止已经运行中的 `xdom.service`，再替换部署目录下的二进制，最后再重新拉起服务。
 
 这样做是为了避免旧进程仍占用 `/opt/xdom/bin/xdom`，导致重复部署时 `cp` 覆盖二进制失败。
+
+部署脚本不会覆盖 `/opt/xdom/conf/config.env`。运行时配置需要你提前在目标机准备好，并在目标机本地持续维护。
+
+`deploy/config.env.example` 只作为初始化参考模板，不再作为部署脚本的输入参数。
 
 如果你的流水线构建产物不是当前目录下的 `xdom`，把 `LOCAL_BINARY` 改成实际产物路径即可。
 

@@ -13,23 +13,22 @@ DEPLOY_LOG_DIR="${DEPLOY_LOG_DIR:-/var/log/${SERVICE_NAME}}"
 SYSTEMD_UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 DEPLOY_BINARY_PATH="${DEPLOY_BIN_DIR}/${SERVICE_NAME}"
 
-LOCAL_ENV_FILE="${LOCAL_ENV_FILE:-}"
 LOCAL_SYSTEMD_FILE="${LOCAL_SYSTEMD_FILE:-}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://127.0.0.1:8080/healthz}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-12}"
 HEALTHCHECK_INTERVAL_SEC="${HEALTHCHECK_INTERVAL_SEC:-5}"
 SERVICE_UNIT="${SERVICE_NAME}.service"
 
-echo "[1/6] preparing local deployment directories under ${DEPLOY_DIR}"
+echo "[1/8] preparing local deployment directories under ${DEPLOY_DIR}"
 mkdir -p "${DEPLOY_BIN_DIR}" "${DEPLOY_CONF_DIR}" "${DEPLOY_RELEASE_DIR}" "${DEPLOY_BACKUP_DIR}"
 mkdir -p "${DEPLOY_LOG_DIR}"
 
-echo "[2/6] backing up previous binary if present"
+echo "[2/8] backing up previous binary if present"
 if [[ -f "${DEPLOY_BINARY_PATH}" ]]; then
   cp "${DEPLOY_BINARY_PATH}" "${DEPLOY_BACKUP_DIR}/${SERVICE_NAME}-$(date +%Y%m%d%H%M%S)"
 fi
 
-echo "[3/6] stopping existing service before replacing binary"
+echo "[3/8] stopping existing service before replacing binary"
 if systemctl list-unit-files "${SERVICE_UNIT}" --no-legend >/dev/null 2>&1; then
   if systemctl is-active --quiet "${SERVICE_UNIT}"; then
     systemctl stop "${SERVICE_UNIT}"
@@ -40,26 +39,26 @@ else
   echo "service ${SERVICE_UNIT} is not installed yet, skipping stop"
 fi
 
-echo "[4/6] copying binary into place"
+echo "[4/8] copying binary into place"
 cp "${LOCAL_BINARY}" "${DEPLOY_BINARY_PATH}"
 chmod +x "${DEPLOY_BINARY_PATH}"
 
-if [[ -n "${LOCAL_ENV_FILE}" ]]; then
-  echo "[5/6] uploading runtime config"
-  cp "${LOCAL_ENV_FILE}" "${DEPLOY_CONF_DIR}/config.env"
-fi
+echo "[5/8] preserving existing runtime config at ${DEPLOY_CONF_DIR}/config.env"
+echo "runtime config is managed locally on the target host and will not be overwritten"
 
+echo "[6/8] installing systemd unit if provided"
 if [[ -n "${LOCAL_SYSTEMD_FILE}" ]]; then
-  echo "[5/6] installing systemd unit"
   cp "${LOCAL_SYSTEMD_FILE}" "${SYSTEMD_UNIT_PATH}"
+else
+  echo "no LOCAL_SYSTEMD_FILE provided, keeping existing unit file"
 fi
 
-echo "[6/6] restarting service"
+echo "[7/8] restarting service"
 systemctl daemon-reload
 systemctl enable "${SERVICE_UNIT}"
 systemctl restart "${SERVICE_UNIT}"
 
-echo "[7/7] verifying health endpoint ${HEALTHCHECK_URL}"
+echo "[8/8] verifying health endpoint ${HEALTHCHECK_URL}"
 for ((i=1; i<=HEALTHCHECK_RETRIES; i++)); do
   if curl -fsS "${HEALTHCHECK_URL}"; then
     echo

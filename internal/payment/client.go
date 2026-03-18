@@ -8,6 +8,7 @@ import (
 
 	"github.com/Xmandon/xdom/internal/faults"
 	"github.com/Xmandon/xdom/internal/telemetry"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
@@ -44,7 +45,7 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 
 	mode, delayMS := c.cfg.Faults.Get()
 	sleepMS := c.cfg.BaseLatencyMS
-	if delayMS > sleepMS {
+	if mode == faults.PaymentTimeout && delayMS > sleepMS {
 		sleepMS = delayMS
 	}
 	time.Sleep(time.Duration(sleepMS) * time.Millisecond)
@@ -53,10 +54,14 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 	case faults.PaymentTimeout:
 		span.RecordError(ErrTimeout)
 		span.SetAttributes(attribute.String("fault.mode", string(mode)))
+		span.SetStatus(codes.Error, ErrTimeout.Error())
+		span.AddEvent("fault.injected", oteltrace.WithAttributes(attribute.String("fault.mode", string(mode))))
 		return ErrTimeout
 	case faults.PaymentError:
 		span.RecordError(ErrCharge)
 		span.SetAttributes(attribute.String("fault.mode", string(mode)))
+		span.SetStatus(codes.Error, ErrCharge.Error())
+		span.AddEvent("fault.injected", oteltrace.WithAttributes(attribute.String("fault.mode", string(mode))))
 		return ErrCharge
 	default:
 		attrs := append([]slog.Attr{
