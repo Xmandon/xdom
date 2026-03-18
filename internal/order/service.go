@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Xmandon/xdom/internal/faults"
+	"github.com/Xmandon/xdom/internal/payment"
 	"github.com/Xmandon/xdom/internal/repository"
 	"github.com/Xmandon/xdom/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"

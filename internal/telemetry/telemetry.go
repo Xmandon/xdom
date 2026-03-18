@@ -146,7 +146,7 @@ func newResource(ctx context.Context, cfg Config) (*resource.Resource, error) {
 		attribute.String("build.id", cfg.BuildID),
 	}
 	if cfg.NetHostIP != "" {
-		attrs = append(attrs, semconv.NetHostIPKey.String(cfg.NetHostIP))
+		attrs = append(attrs, attribute.String("net.host.ip", cfg.NetHostIP))
 	}
 
 	extraRes, err := resource.New(
