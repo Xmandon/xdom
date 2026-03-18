@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"embed"
 	"encoding/json"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -14,6 +16,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
+
+//go:embed ui/*
+var uiFiles embed.FS
 
 type Config struct {
 	ServiceName string
@@ -32,8 +37,9 @@ type Config struct {
 }
 
 type Handler struct {
-	cfg Config
-	mux *http.ServeMux
+	cfg      Config
+	mux      *http.ServeMux
+	indexHTML []byte
 }
 
 type faultRequest struct {
@@ -42,10 +48,23 @@ type faultRequest struct {
 }
 
 func NewHandler(cfg Config) *Handler {
-	h := &Handler{
-		cfg: cfg,
-		mux: http.NewServeMux(),
+	uiSub, err := fs.Sub(uiFiles, "ui")
+	if err != nil {
+		panic(err)
 	}
+	indexHTML, err := fs.ReadFile(uiSub, "index.html")
+	if err != nil {
+		panic(err)
+	}
+
+	h := &Handler{
+		cfg:       cfg,
+		mux:       http.NewServeMux(),
+		indexHTML: indexHTML,
+	}
+	h.mux.Handle("/", h.observeHandler("/", http.HandlerFunc(h.handleRoot)))
+	h.mux.Handle("/ui", h.observeHandler("/ui", http.HandlerFunc(h.handleUI)))
+	h.mux.Handle("/assets/", h.observeHandler("/assets", http.StripPrefix("/assets/", http.FileServer(http.FS(uiSub)))))
 	h.mux.HandleFunc("/healthz", h.wrap("/healthz", h.handleHealthz))
 	h.mux.HandleFunc("/api/orders", h.wrap("/api/orders", h.handleCreateOrder))
 	h.mux.HandleFunc("/api/orders/", h.wrap("/api/orders/:id", h.handleOrderByID))
@@ -58,6 +77,15 @@ func NewHandler(cfg Config) *Handler {
 
 func (h *Handler) Router() http.Handler {
 	return h.mux
+}
+
+func (h *Handler) observeHandler(api string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		h.cfg.Metrics.ObserveHTTPRequest(r.Context(), api, recorder.status, time.Since(started))
+	})
 }
 
 func (h *Handler) wrap(api string, next func(http.ResponseWriter, *http.Request) (int, any)) http.HandlerFunc {
@@ -77,6 +105,24 @@ func (h *Handler) wrap(api string, next func(http.ResponseWriter, *http.Request)
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(payload)
 	}
+}
+
+func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, "/ui", http.StatusFound)
+}
+
+func (h *Handler) handleUI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(h.indexHTML)
 }
 
 func (h *Handler) handleHealthz(_ http.ResponseWriter, _ *http.Request) (int, any) {
@@ -220,4 +266,14 @@ func toError(err error) (int, any) {
 
 func errorsIs(err error, target error) bool {
 	return err != nil && target != nil && (err == target || strings.Contains(err.Error(), target.Error()))
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
 }

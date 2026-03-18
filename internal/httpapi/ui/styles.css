@@ -1,0 +1,265 @@
+:root {
+  color-scheme: dark;
+  --bg: #08111f;
+  --panel: #111c2f;
+  --panel-alt: #17243a;
+  --border: #2a3c5b;
+  --text: #edf2ff;
+  --muted: #8ea3c3;
+  --accent: #66d1ff;
+  --accent-strong: #2f83ff;
+  --success: #40c57b;
+  --danger: #f46d75;
+  --warning: #ffbf69;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(47, 131, 255, 0.2), transparent 32%),
+    radial-gradient(circle at top right, rgba(102, 209, 255, 0.16), transparent 28%),
+    var(--bg);
+  color: var(--text);
+}
+
+.page {
+  width: min(1200px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.hero,
+.cardHeader,
+.inlineActions,
+.formActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hero {
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(32px, 4vw, 44px);
+}
+
+.subtitle,
+.muted {
+  color: var(--muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%), var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.cardWide {
+  grid-column: 1 / -1;
+}
+
+.pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(102, 209, 255, 0.14);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pill.success {
+  background: rgba(64, 197, 123, 0.14);
+  color: var(--success);
+}
+
+.pill.danger {
+  background: rgba(244, 109, 117, 0.14);
+  color: var(--danger);
+}
+
+.metaList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 18px 0;
+}
+
+.metaList div {
+  background: var(--panel-alt);
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.metaList dt {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.metaList dd {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.formGrid.compact,
+.faultGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text);
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid rgba(102, 209, 255, 0.28);
+  border-color: var(--accent);
+}
+
+.button {
+  border: 0;
+  border-radius: 12px;
+  padding: 11px 14px;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #06101d;
+  font-weight: 700;
+}
+
+.button.secondary {
+  background: var(--panel-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.button.danger {
+  background: rgba(244, 109, 117, 0.16);
+  color: #ffd9dc;
+  border: 1px solid rgba(244, 109, 117, 0.3);
+}
+
+.formActions,
+.inlineActions {
+  align-items: end;
+}
+
+.output {
+  margin: 18px 0 0;
+  padding: 14px;
+  min-height: 120px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+  color: #c9d8f1;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  .formGrid,
+  .formGrid.compact,
+  .faultGrid,
+  .metaList {
+    grid-template-columns: 1fr;
+  }
+
+  .hero,
+  .cardHeader,
+  .inlineActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .inlineActions,
+  .formActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

@@ -9,6 +9,7 @@
 - 模拟下游支付调用
 - 后台 worker 处理超时订单
 - OpenTelemetry traces / metrics / logs 接入基础设施
+- 内嵌式 Web 控制台
 - 故障注入接口
 - CVM 二进制部署脚本
 - `systemd` 服务文件
@@ -23,6 +24,24 @@
 - `POST /admin/fault`
 - `GET /metrics`
 - `GET /version`
+- `GET /ui`
+
+## Web 控制台
+
+浏览器可直接访问：
+
+- `http://127.0.0.1:8080/ui`
+- `http://<CVM_IP>:8080/ui`
+
+控制台首版支持：
+
+- 查看健康状态、版本信息、当前故障模式
+- 查看库存
+- 创建订单
+- 查询和取消订单
+- 手动触发故障注入
+
+故障注入需要你在页面里输入 `ADMIN_TOKEN`，页面不会在前端代码里硬编码这个值。
 
 ## 本地运行
 

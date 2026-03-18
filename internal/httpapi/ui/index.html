@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>xdom Control Console</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">xdom</p>
+        <h1>Order Service Control Console</h1>
+        <p class="subtitle">Browser-based drill console for service status, orders, inventory, and fault injection.</p>
+      </div>
+      <button id="refreshDashboard" class="button secondary" type="button">Refresh Dashboard</button>
+    </header>
+
+    <main class="grid">
+      <section class="card">
+        <div class="cardHeader">
+          <h2>Service Status</h2>
+          <span class="pill" id="healthBadge">Unknown</span>
+        </div>
+        <dl class="metaList">
+          <div><dt>Service</dt><dd id="serviceName">-</dd></div>
+          <div><dt>Environment</dt><dd id="serviceEnv">-</dd></div>
+          <div><dt>Version</dt><dd id="serviceVersion">-</dd></div>
+          <div><dt>Commit</dt><dd id="serviceCommit">-</dd></div>
+          <div><dt>Build</dt><dd id="serviceBuild">-</dd></div>
+          <div><dt>Fault Mode</dt><dd id="faultMode">-</dd></div>
+          <div><dt>Fault Delay</dt><dd id="faultDelay">-</dd></div>
+        </dl>
+        <pre class="output" id="statusOutput">Waiting for data...</pre>
+      </section>
+
+      <section class="card">
+        <div class="cardHeader">
+          <h2>Inventory</h2>
+          <button id="refreshInventory" class="button secondary" type="button">Reload Inventory</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Available</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryBody">
+            <tr><td colspan="2">Loading...</td></tr>
+          </tbody>
+        </table>
+        <pre class="output" id="inventoryOutput">Inventory response will appear here.</pre>
+      </section>
+
+      <section class="card">
+        <div class="cardHeader">
+          <h2>Create Order</h2>
+        </div>
+        <form id="createOrderForm" class="formGrid">
+          <label>
+            User ID
+            <input name="user_id" value="u-demo" required>
+          </label>
+          <label>
+            SKU
+            <select name="sku">
+              <option value="sku-book">sku-book</option>
+              <option value="sku-card">sku-card</option>
+              <option value="sku-bundle">sku-bundle</option>
+            </select>
+          </label>
+          <label>
+            Quantity
+            <input name="quantity" type="number" min="1" value="1" required>
+          </label>
+          <label>
+            Amount
+            <input name="amount" type="number" min="0.01" step="0.01" value="99.90" required>
+          </label>
+          <label>
+            Payment Channel
+            <input name="payment_channel" value="mockpay">
+          </label>
+          <div class="formActions">
+            <button class="button primary" type="submit">Create Order</button>
+          </div>
+        </form>
+        <pre class="output" id="createOrderOutput">Order creation result will appear here.</pre>
+      </section>
+
+      <section class="card">
+        <div class="cardHeader">
+          <h2>Order Lookup</h2>
+        </div>
+        <form id="orderLookupForm" class="formGrid compact">
+          <label>
+            Order ID
+            <input id="orderIdInput" name="order_id" placeholder="ord-..." required>
+          </label>
+          <div class="inlineActions">
+            <button class="button secondary" type="submit">Query Order</button>
+            <button class="button danger" id="cancelOrderButton" type="button">Cancel Order</button>
+          </div>
+        </form>
+        <pre class="output" id="orderLookupOutput">Order details will appear here.</pre>
+      </section>
+
+      <section class="card cardWide">
+        <div class="cardHeader">
+          <h2>Fault Injection</h2>
+          <span class="muted">Requires `ADMIN_TOKEN`</span>
+        </div>
+        <form id="faultForm" class="formGrid faultGrid">
+          <label>
+            Admin Token
+            <input id="adminTokenInput" name="admin_token" type="password" placeholder="Enter ADMIN_TOKEN">
+          </label>
+          <label>
+            Fault Mode
+            <select name="mode">
+              <option value="none">none</option>
+              <option value="payment_timeout">payment_timeout</option>
+              <option value="payment_error">payment_error</option>
+              <option value="db_slow_query">db_slow_query</option>
+              <option value="db_write_error">db_write_error</option>
+              <option value="inventory_conflict">inventory_conflict</option>
+              <option value="worker_panic">worker_panic</option>
+              <option value="health_fail">health_fail</option>
+            </select>
+          </label>
+          <label>
+            Delay (ms)
+            <input name="delay_ms" type="number" min="0" value="1500">
+          </label>
+          <div class="inlineActions">
+            <button class="button primary" type="submit">Apply Fault</button>
+            <button class="button secondary" id="resetFaultButton" type="button">Reset to none</button>
+          </div>
+        </form>
+        <pre class="output" id="faultOutput">Fault operation result will appear here.</pre>
+      </section>
+    </main>
+  </div>
+
+  <script defer src="/assets/app.js"></script>
+</body>
+</html>
