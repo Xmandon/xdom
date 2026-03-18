@@ -56,12 +56,26 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 		span.SetAttributes(attribute.String("fault.mode", string(mode)))
 		span.SetStatus(codes.Error, ErrTimeout.Error())
 		span.AddEvent("fault.injected", oteltrace.WithAttributes(attribute.String("fault.mode", string(mode))))
+		attrs := append([]slog.Attr{
+			slog.String("order_id", orderID),
+			slog.String("payment_channel", channel),
+			slog.String("fault_mode", string(mode)),
+			slog.String("error", ErrTimeout.Error()),
+		}, telemetry.TraceLogAttrs(ctx)...)
+		c.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "payment timeout injected", attrs...)
 		return ErrTimeout
 	case faults.PaymentError:
 		span.RecordError(ErrCharge)
 		span.SetAttributes(attribute.String("fault.mode", string(mode)))
 		span.SetStatus(codes.Error, ErrCharge.Error())
 		span.AddEvent("fault.injected", oteltrace.WithAttributes(attribute.String("fault.mode", string(mode))))
+		attrs := append([]slog.Attr{
+			slog.String("order_id", orderID),
+			slog.String("payment_channel", channel),
+			slog.String("fault_mode", string(mode)),
+			slog.String("error", ErrCharge.Error()),
+		}, telemetry.TraceLogAttrs(ctx)...)
+		c.cfg.Logger.LogAttrs(ctx, slog.LevelError, "payment charge failed", attrs...)
 		return ErrCharge
 	default:
 		attrs := append([]slog.Attr{
