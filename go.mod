@@ -15,5 +15,5 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.5.0
 	go.opentelemetry.io/otel/sdk/metric v1.29.0
 	go.opentelemetry.io/otel/trace v1.29.0
-	modernc.org/sqlite v1.46.2
+	modernc.org/sqlite v1.30.0
 )
