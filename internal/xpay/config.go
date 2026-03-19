@@ -1,4 +1,4 @@
-package app
+package xpay
 
 import (
 	"os"
@@ -14,7 +14,6 @@ type Config struct {
 	BuildID                 string
 	ListenAddr              string
 	AdminToken              string
-	DBPath                  string
 	LogLevel                string
 	Token                   string
 	OTLPEndpoint            string
@@ -27,24 +26,18 @@ type Config struct {
 	OTLPTraceBatchTimeoutMS int
 	OTLPLogBatchTimeoutMS   int
 	NetHostIP               string
-	PaymentServiceURL       string
-	PaymentRequestTimeoutMS int
-	PaymentLatencyMS        int
-	OrderTimeoutSec         int
-	WorkerIntervalSec       int
-	HeartbeatLogIntervalSec int
+	BaseLatencyMS           int
 }
 
 func LoadConfigFromEnv() Config {
 	return Config{
-		ServiceName:             getEnv("SERVICE_NAME", "xdom"),
+		ServiceName:             getEnv("XPAY_SERVICE_NAME", "xpay"),
 		Environment:             getEnv("ENVIRONMENT", "dev"),
 		Version:                 getEnv("VERSION", "0.1.0"),
 		CommitSHA:               getEnv("COMMIT_SHA", "unknown"),
 		BuildID:                 getEnv("BUILD_ID", "local"),
-		ListenAddr:              getEnv("LISTEN_ADDR", ":8080"),
-		AdminToken:              getEnv("ADMIN_TOKEN", "xdom-admin-token"),
-		DBPath:                  getEnv("DB_PATH", "data/xdom.db"),
+		ListenAddr:              getEnv("XPAY_LISTEN_ADDR", ":8081"),
+		AdminToken:              getEnv("XPAY_ADMIN_TOKEN", getEnv("ADMIN_TOKEN", "xdom-admin-token")),
 		LogLevel:                getEnv("LOG_LEVEL", "info"),
 		Token:                   getEnv("TOKEN", ""),
 		OTLPEndpoint:            trimScheme(getEnv("OTLP_ENDPOINT", "")),
@@ -57,12 +50,7 @@ func LoadConfigFromEnv() Config {
 		OTLPTraceBatchTimeoutMS: getIntEnv("OTLP_TRACE_BATCH_TIMEOUT_MS", 2000),
 		OTLPLogBatchTimeoutMS:   getIntEnv("OTLP_LOG_BATCH_TIMEOUT_MS", 2000),
 		NetHostIP:               getEnv("NET_HOST_IP", ""),
-		PaymentServiceURL:       getEnv("PAYMENT_SERVICE_URL", "http://127.0.0.1:8081"),
-		PaymentRequestTimeoutMS: getIntEnv("PAYMENT_REQUEST_TIMEOUT_MS", 2000),
-		PaymentLatencyMS:        getIntEnv("PAYMENT_LATENCY_MS", 150),
-		OrderTimeoutSec:         getIntEnv("ORDER_TIMEOUT_SEC", 30),
-		WorkerIntervalSec:       getIntEnv("WORKER_INTERVAL_SEC", 10),
-		HeartbeatLogIntervalSec: getIntEnv("HEARTBEAT_LOG_INTERVAL_SEC", 30),
+		BaseLatencyMS:           getIntEnv("XPAY_BASE_LATENCY_MS", getIntEnv("PAYMENT_LATENCY_MS", 150)),
 	}
 }
 

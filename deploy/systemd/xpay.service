@@ -1,0 +1,17 @@
+[Unit]
+Description=xpay payment service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/xdom
+EnvironmentFile=/opt/xdom/conf/config.env
+ExecStart=/opt/xdom/bin/xpay
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/xpay/stdout.log
+StandardError=append:/var/log/xpay/stderr.log
+
+[Install]
+WantedBy=multi-user.target

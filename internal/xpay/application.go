@@ -1,4 +1,4 @@
-package app
+package xpay
 
 import (
 	"context"
@@ -10,18 +10,12 @@ import (
 	"time"
 
 	"github.com/Xmandon/xdom/internal/faults"
-	"github.com/Xmandon/xdom/internal/httpapi"
-	"github.com/Xmandon/xdom/internal/order"
-	"github.com/Xmandon/xdom/internal/payment"
-	"github.com/Xmandon/xdom/internal/repository"
 	"github.com/Xmandon/xdom/internal/telemetry"
-	"github.com/Xmandon/xdom/internal/worker"
 )
 
 type Application struct {
 	cfg       Config
 	server    *http.Server
-	worker    *worker.Runner
 	telemetry *telemetry.Manager
 }
 
@@ -51,92 +45,34 @@ func New(cfg Config) (*Application, error) {
 	}
 
 	faultState := faults.NewState()
-	repo, err := repository.NewSQLiteRepository(ctx, repository.Config{
-		DBPath:  cfg.DBPath,
-		Logger:  tel.Logger(),
-		Faults:  faultState,
-		Tracer:  tel.Tracer(),
-		Metrics: tel,
-	})
-	if err != nil {
-		_ = tel.Shutdown(ctx)
-		return nil, fmt.Errorf("init repository: %w", err)
-	}
-
-	if err := repo.Init(ctx); err != nil {
-		_ = tel.Shutdown(ctx)
-		return nil, fmt.Errorf("init schema: %w", err)
-	}
-	if err := repo.SeedInventory(ctx); err != nil {
-		_ = tel.Shutdown(ctx)
-		return nil, fmt.Errorf("seed inventory: %w", err)
-	}
-
-	paymentClient := payment.NewClient(payment.Config{
-		BaseURL:        cfg.PaymentServiceURL,
-		RequestTimeout: cfg.PaymentRequestTimeoutMS,
-		Logger:         tel.Logger(),
-		Tracer:         tel.Tracer(),
-	})
-
-	orderService := order.NewService(order.Config{
-		ServiceName:     cfg.ServiceName,
-		Environment:     cfg.Environment,
-		Version:         cfg.Version,
-		CommitSHA:       cfg.CommitSHA,
-		OrderTimeoutSec: cfg.OrderTimeoutSec,
-		Repository:      repo,
-		PaymentClient:   paymentClient,
-		Faults:          faultState,
-		Logger:          tel.Logger(),
-		Tracer:          tel.Tracer(),
-		Metrics:         tel,
-	})
-
-	tel.SetActivePendingOrdersProvider(func(ctx context.Context) int64 {
-		count, err := repo.CountActivePendingOrders(ctx)
-		if err != nil {
-			return 0
-		}
-		return count
-	})
-
-	workerRunner := worker.NewRunner(worker.Config{
-		Interval:             time.Duration(cfg.WorkerIntervalSec) * time.Second,
-		HeartbeatLogInterval: time.Duration(cfg.HeartbeatLogIntervalSec) * time.Second,
-		Service:              orderService,
-		Logger:               tel.Logger(),
-		Faults:               faultState,
-		Metrics:              tel,
-		Tracer:               tel.Tracer(),
-	})
-
-	handler := httpapi.NewHandler(httpapi.Config{
+	handler, err := NewHandler(HandlerConfig{
 		ServiceName:   cfg.ServiceName,
 		Environment:   cfg.Environment,
 		Version:       cfg.Version,
 		CommitSHA:     cfg.CommitSHA,
 		BuildID:       cfg.BuildID,
 		AdminToken:    cfg.AdminToken,
+		BaseLatencyMS: cfg.BaseLatencyMS,
 		EnableTraces:  cfg.EnableTraces,
 		EnableMetrics: cfg.EnableMetrics,
 		EnableLogs:    cfg.EnableLogs,
-		Order:         orderService,
 		Faults:        faultState,
 		Metrics:       tel,
 		Logger:        tel.Logger(),
 	})
+	if err != nil {
+		_ = tel.Shutdown(ctx)
+		return nil, fmt.Errorf("init handler: %w", err)
+	}
 
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           tel.WrapHTTPHandler(handler.Router(), "http.server"),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-
 	return &Application{
 		cfg:       cfg,
 		server:    server,
-		worker:    workerRunner,
 		telemetry: tel,
 	}, nil
 }
@@ -144,13 +80,9 @@ func New(cfg Config) (*Application, error) {
 func (a *Application) Run(ctx context.Context) (runErr error) {
 	a.telemetry.Logger().InfoContext(ctx, fmt.Sprintf("starting %s on %s", a.cfg.ServiceName, a.cfg.ListenAddr))
 
-	workerCtx, workerCancel := context.WithCancel(ctx)
-	defer workerCancel()
-	go a.worker.Start(workerCtx)
-
 	var shutdownOnce sync.Once
-	var shutdownErrMu sync.Mutex
 	var shutdownErr error
+	var shutdownErrMu sync.Mutex
 	recordShutdownErr := func(err error) {
 		if err == nil {
 			return
@@ -163,7 +95,6 @@ func (a *Application) Run(ctx context.Context) (runErr error) {
 		shutdownOnce.Do(func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			workerCancel()
 			if err := a.server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				recordShutdownErr(err)
 			}

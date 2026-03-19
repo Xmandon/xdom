@@ -110,12 +110,13 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 
 	if err := s.cfg.PaymentClient.Charge(ctx, rec.ID, rec.Amount, rec.PaymentChannel); err != nil {
 		span.RecordError(err)
-		mode, _ := s.cfg.Faults.Get()
-		if mode == faults.PaymentTimeout {
-			span.SetAttributes(attribute.String("fault.mode", string(mode)))
+		faultMode := "payment_remote_error"
+		switch {
+		case err == payment.ErrTimeout:
+			span.SetAttributes(attribute.String("fault.mode", string(faults.PaymentTimeout)))
 			span.SetStatus(codes.Error, err.Error())
 			span.AddEvent("fault.detected", oteltrace.WithAttributes(
-				attribute.String("fault.mode", string(mode)),
+				attribute.String("fault.mode", string(faults.PaymentTimeout)),
 				attribute.String("order.id", rec.ID),
 				attribute.String("outcome", "pending_for_reconciliation"),
 			))
@@ -123,18 +124,18 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 			attrs := append([]slog.Attr{
 				slog.String("order_id", rec.ID),
 				slog.String("status", rec.Status),
-				slog.String("fault_mode", string(mode)),
+				slog.String("fault_mode", string(faults.PaymentTimeout)),
 				slog.String("error_code", "payment_timeout"),
 				slog.String("code_location", "internal/order/service.go:CreateOrder"),
 			}, telemetry.TraceLogAttrs(ctx)...)
 			s.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "order left pending after payment timeout", attrs...)
 			return toResponse(rec), nil
-		}
-		if mode == faults.PaymentError {
-			span.SetAttributes(attribute.String("fault.mode", string(mode)))
+		case err == payment.ErrCharge:
+			faultMode = string(faults.PaymentError)
+			span.SetAttributes(attribute.String("fault.mode", string(faults.PaymentError)))
 			span.SetStatus(codes.Error, err.Error())
 			span.AddEvent("fault.detected", oteltrace.WithAttributes(
-				attribute.String("fault.mode", string(mode)),
+				attribute.String("fault.mode", string(faults.PaymentError)),
 				attribute.String("order.id", rec.ID),
 			))
 		}
@@ -146,7 +147,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (Orde
 			slog.String("order_id", rec.ID),
 			slog.String("status", rec.Status),
 			slog.String("error", err.Error()),
-			slog.String("fault_mode", string(mode)),
+			slog.String("fault_mode", faultMode),
 			slog.String("error_code", "order_payment_failed"),
 			slog.String("code_location", "internal/order/service.go:CreateOrder"),
 		}, telemetry.TraceLogAttrs(ctx)...)

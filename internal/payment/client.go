@@ -1,13 +1,18 @@
 package payment
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
-	"github.com/Xmandon/xdom/internal/faults"
+	"github.com/Xmandon/xdom/internal/paymentapi"
 	"github.com/Xmandon/xdom/internal/telemetry"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -19,19 +24,24 @@ var (
 )
 
 type Config struct {
-	BaseLatencyMS int
-	Logger        *slog.Logger
-	Faults        *faults.State
-	Tracer        oteltrace.Tracer
-	Metrics       *telemetry.Manager
+	BaseURL        string
+	RequestTimeout int
+	Logger         *slog.Logger
+	Tracer         oteltrace.Tracer
 }
 
 type Client struct {
-	cfg Config
+	cfg        Config
+	httpClient *http.Client
 }
 
 func NewClient(cfg Config) *Client {
-	return &Client{cfg: cfg}
+	return &Client{
+		cfg: cfg,
+		httpClient: &http.Client{
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
+	}
 }
 
 func (c *Client) Charge(ctx context.Context, orderID string, amount float64, channel string) error {
@@ -41,53 +51,102 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 		attribute.String("order.id", orderID),
 		attribute.String("payment.channel", channel),
 		attribute.Float64("payment.amount", amount),
+		attribute.String("server.address", c.cfg.BaseURL),
 	)
 
-	mode, delayMS := c.cfg.Faults.Get()
-	sleepMS := c.cfg.BaseLatencyMS
-	if mode == faults.PaymentTimeout && delayMS > sleepMS {
-		sleepMS = delayMS
+	reqBody, err := json.Marshal(paymentapi.ChargeRequest{
+		OrderID: orderID,
+		Amount:  amount,
+		Channel: channel,
+	})
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
-	time.Sleep(time.Duration(sleepMS) * time.Millisecond)
 
-	switch mode {
-	case faults.PaymentTimeout:
-		span.RecordError(ErrTimeout)
-		span.SetAttributes(attribute.String("fault.mode", string(mode)))
+	requestCtx := ctx
+	if c.cfg.RequestTimeout > 0 {
+		timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(c.cfg.RequestTimeout)*time.Millisecond)
+		defer cancel()
+		requestCtx = timeoutCtx
+	}
+	endpoint := strings.TrimRight(c.cfg.BaseURL, "/") + "/charge"
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(reqBody))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
 		span.SetStatus(codes.Error, ErrTimeout.Error())
-		span.AddEvent("fault.injected", oteltrace.WithAttributes(attribute.String("fault.mode", string(mode))))
+		span.SetAttributes(attribute.String("error.code", paymentapi.ErrorCodeTimeout))
+		span.AddEvent("payment.remote_error", oteltrace.WithAttributes(attribute.String("error.code", paymentapi.ErrorCodeTimeout)))
 		attrs := append([]slog.Attr{
 			slog.String("order_id", orderID),
 			slog.String("payment_channel", channel),
-			slog.String("fault_mode", string(mode)),
-			slog.String("error_code", "payment_timeout"),
+			slog.String("error_code", paymentapi.ErrorCodeTimeout),
+			slog.String("code_location", "internal/payment/client.go:Charge"),
+			slog.String("error", err.Error()),
+		}, telemetry.TraceLogAttrs(ctx)...)
+		c.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "payment request failed", attrs...)
+		return ErrTimeout
+	}
+	defer resp.Body.Close()
+
+	var payload paymentapi.ChargeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	span.SetAttributes(
+		attribute.Int("http.response.status_code", resp.StatusCode),
+		attribute.String("payment.response.status", payload.Status),
+	)
+
+	switch {
+	case resp.StatusCode == http.StatusGatewayTimeout || payload.ErrorCode == paymentapi.ErrorCodeTimeout:
+		span.RecordError(ErrTimeout)
+		span.SetStatus(codes.Error, ErrTimeout.Error())
+		span.SetAttributes(attribute.String("error.code", paymentapi.ErrorCodeTimeout))
+		span.AddEvent("payment.remote_error", oteltrace.WithAttributes(attribute.String("error.code", paymentapi.ErrorCodeTimeout)))
+		attrs := append([]slog.Attr{
+			slog.String("order_id", orderID),
+			slog.String("payment_channel", channel),
+			slog.String("error_code", paymentapi.ErrorCodeTimeout),
 			slog.String("code_location", "internal/payment/client.go:Charge"),
 			slog.String("error", ErrTimeout.Error()),
 		}, telemetry.TraceLogAttrs(ctx)...)
-		c.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "payment timeout injected", attrs...)
+		c.cfg.Logger.LogAttrs(ctx, slog.LevelWarn, "payment timeout", attrs...)
 		return ErrTimeout
-	case faults.PaymentError:
+	case resp.StatusCode >= http.StatusBadRequest || payload.ErrorCode == paymentapi.ErrorCodeChargeFailed:
 		span.RecordError(ErrCharge)
-		span.SetAttributes(attribute.String("fault.mode", string(mode)))
 		span.SetStatus(codes.Error, ErrCharge.Error())
-		span.AddEvent("fault.injected", oteltrace.WithAttributes(attribute.String("fault.mode", string(mode))))
+		span.SetAttributes(attribute.String("error.code", paymentapi.ErrorCodeChargeFailed))
+		span.AddEvent("payment.remote_error", oteltrace.WithAttributes(attribute.String("error.code", paymentapi.ErrorCodeChargeFailed)))
 		attrs := append([]slog.Attr{
 			slog.String("order_id", orderID),
 			slog.String("payment_channel", channel),
-			slog.String("fault_mode", string(mode)),
-			slog.String("error_code", "payment_charge_failed"),
+			slog.String("error_code", paymentapi.ErrorCodeChargeFailed),
 			slog.String("code_location", "internal/payment/client.go:Charge"),
 			slog.String("error", ErrCharge.Error()),
 		}, telemetry.TraceLogAttrs(ctx)...)
 		c.cfg.Logger.LogAttrs(ctx, slog.LevelError, "payment charge failed", attrs...)
 		return ErrCharge
-	default:
-		attrs := append([]slog.Attr{
-			slog.String("order_id", orderID),
-			slog.String("payment_channel", channel),
-			slog.String("code_location", "internal/payment/client.go:Charge"),
-		}, telemetry.TraceLogAttrs(ctx)...)
-		c.cfg.Logger.LogAttrs(ctx, slog.LevelInfo, "payment charged", attrs...)
-		return nil
 	}
+
+	attrs := append([]slog.Attr{
+		slog.String("order_id", orderID),
+		slog.String("payment_channel", channel),
+		slog.String("authorization_id", payload.AuthorizationID),
+		slog.String("code_location", "internal/payment/client.go:Charge"),
+	}, telemetry.TraceLogAttrs(ctx)...)
+	c.cfg.Logger.LogAttrs(ctx, slog.LevelInfo, "payment charged", attrs...)
+	return nil
 }

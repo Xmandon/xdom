@@ -21,24 +21,24 @@ import (
 var uiFiles embed.FS
 
 type Config struct {
-	ServiceName string
-	Environment string
-	Version     string
-	CommitSHA   string
-	BuildID     string
-	AdminToken  string
+	ServiceName   string
+	Environment   string
+	Version       string
+	CommitSHA     string
+	BuildID       string
+	AdminToken    string
 	EnableTraces  bool
 	EnableMetrics bool
 	EnableLogs    bool
-	Order       *order.Service
-	Faults      *faults.State
-	Metrics     *telemetry.Manager
-	Logger      *slog.Logger
+	Order         *order.Service
+	Faults        *faults.State
+	Metrics       *telemetry.Manager
+	Logger        *slog.Logger
 }
 
 type Handler struct {
-	cfg      Config
-	mux      *http.ServeMux
+	cfg       Config
+	mux       *http.ServeMux
 	indexHTML []byte
 }
 
@@ -210,7 +210,7 @@ func (h *Handler) handleFault(_ http.ResponseWriter, r *http.Request) (int, any)
 	}
 
 	switch req.Mode {
-	case faults.None, faults.PaymentTimeout, faults.PaymentError, faults.DBSlowQuery, faults.DBWriteError, faults.InventoryConflict, faults.WorkerPanic, faults.HealthFail:
+	case faults.None, faults.DBSlowQuery, faults.DBWriteError, faults.InventoryConflict, faults.WorkerPanic, faults.HealthFail:
 	default:
 		return http.StatusBadRequest, map[string]any{"error": "unsupported_fault_mode"}
 	}
