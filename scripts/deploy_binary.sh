@@ -18,6 +18,35 @@ HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://127.0.0.1:8080/healthz}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-12}"
 HEALTHCHECK_INTERVAL_SEC="${HEALTHCHECK_INTERVAL_SEC:-5}"
 SERVICE_UNIT="${SERVICE_NAME}.service"
+DEPLOY_CONFIG_FILE="${DEPLOY_CONF_DIR}/config.env"
+
+upsert_config() {
+  local key="$1"
+  local value="$2"
+  local file="$3"
+
+  if [[ ! -f "${file}" ]]; then
+    touch "${file}"
+  fi
+
+  if rg -q "^${key}=" "${file}"; then
+    python3 - "${file}" "${key}" "${value}" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+key = sys.argv[2]
+value = sys.argv[3]
+lines = path.read_text().splitlines()
+path.write_text("\n".join(
+    f"{key}={value}" if line.startswith(f"{key}=") else line
+    for line in lines
+) + "\n")
+PY
+  else
+    printf '%s=%s\n' "${key}" "${value}" >> "${file}"
+  fi
+}
 
 echo "[1/8] preparing local deployment directories under ${DEPLOY_DIR}"
 mkdir -p "${DEPLOY_BIN_DIR}" "${DEPLOY_CONF_DIR}" "${DEPLOY_RELEASE_DIR}" "${DEPLOY_BACKUP_DIR}"
@@ -45,6 +74,14 @@ chmod +x "${DEPLOY_BINARY_PATH}"
 
 echo "[5/8] preserving existing runtime config at ${DEPLOY_CONF_DIR}/config.env"
 echo "runtime config is managed locally on the target host and will not be overwritten"
+if [[ -n "${TOKEN:-}" ]]; then
+  echo "injecting TOKEN into runtime config from deploy arguments"
+  upsert_config "TOKEN" "${TOKEN}" "${DEPLOY_CONFIG_FILE}"
+fi
+if [[ -n "${NET_HOST_IP:-}" ]]; then
+  echo "injecting NET_HOST_IP into runtime config from deploy arguments"
+  upsert_config "NET_HOST_IP" "${NET_HOST_IP}" "${DEPLOY_CONFIG_FILE}"
+fi
 
 echo "[6/8] installing systemd unit if provided"
 if [[ -n "${LOCAL_SYSTEMD_FILE}" ]]; then

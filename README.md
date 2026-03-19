@@ -146,6 +146,8 @@ DEPLOY_DIR="/opt/xdom" \
 SERVICE_NAME="xdom" \
 LOCAL_BINARY="xdom" \
 LOCAL_SYSTEMD_FILE="deploy/systemd/xdom.service" \
+TOKEN="${TOKEN}" \
+NET_HOST_IP="${NET_HOST_IP}" \
 HEALTHCHECK_URL="http://127.0.0.1:8080/healthz" \
 bash scripts/deploy_binary.sh
 
@@ -153,6 +155,8 @@ DEPLOY_DIR="/opt/xdom" \
 SERVICE_NAME="xpay" \
 LOCAL_BINARY="xpay" \
 LOCAL_SYSTEMD_FILE="deploy/systemd/xpay.service" \
+TOKEN="${TOKEN}" \
+NET_HOST_IP="${NET_HOST_IP}" \
 HEALTHCHECK_URL="http://127.0.0.1:8081/healthz" \
 bash scripts/deploy_binary.sh
 ```
@@ -165,7 +169,9 @@ bash scripts/deploy_binary.sh
 
 这样做是为了避免旧进程仍占用 `/opt/xdom/bin/xdom`，导致重复部署时 `cp` 覆盖二进制失败。
 
-部署脚本不会覆盖 `/opt/xdom/conf/config.env`。运行时配置需要你提前在目标机准备好，并在目标机本地持续维护。
+部署脚本不会整体覆盖 `/opt/xdom/conf/config.env`。运行时配置需要你提前在目标机准备好，并在目标机本地持续维护。
+
+如果你在部署命令里显式传入 `TOKEN` 或 `NET_HOST_IP`，脚本会只更新这两个键到 `/opt/xdom/conf/config.env`，避免把它们固定写死在模板里。
 
 `deploy/config.env.example` 只作为初始化参考模板，不再作为部署脚本的输入参数。
 
