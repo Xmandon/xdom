@@ -10,8 +10,8 @@ import (
 	"github.com/Xmandon/xdom/internal/payment"
 	"github.com/Xmandon/xdom/internal/repository"
 	"github.com/Xmandon/xdom/internal/telemetry"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -61,7 +61,7 @@ func NewService(cfg Config) *Service {
 
 func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (OrderResponse, error) {
 	started := time.Now()
-	ctx, span := s.cfg.Tracer.Start(ctx, "order.create")
+	ctx, span := s.cfg.Tracer.Start(ctx, "order.create", oteltrace.WithSpanKind(oteltrace.SpanKindInternal))
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("service.name", s.cfg.ServiceName),

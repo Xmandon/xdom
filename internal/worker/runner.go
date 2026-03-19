@@ -10,22 +10,24 @@ import (
 	"github.com/Xmandon/xdom/internal/faults"
 	"github.com/Xmandon/xdom/internal/order"
 	"github.com/Xmandon/xdom/internal/telemetry"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type Config struct {
-	Interval time.Duration
-	Service  *order.Service
-	Logger   *slog.Logger
-	Faults   *faults.State
-	Metrics  *telemetry.Manager
-	Tracer   oteltrace.Tracer
+	Interval             time.Duration
+	HeartbeatLogInterval time.Duration
+	Service              *order.Service
+	Logger               *slog.Logger
+	Faults               *faults.State
+	Metrics              *telemetry.Manager
+	Tracer               oteltrace.Tracer
 }
 
 type Runner struct {
-	cfg Config
+	cfg              Config
+	lastHeartbeatLog time.Time
 }
 
 func NewRunner(cfg Config) *Runner {
@@ -47,8 +49,10 @@ func (r *Runner) Start(ctx context.Context) {
 }
 
 func (r *Runner) runOnce(ctx context.Context) {
-	ctx, span := r.cfg.Tracer.Start(ctx, "worker.run_once")
+	heartbeatAt := time.Now().UTC()
+	ctx, span := r.cfg.Tracer.Start(ctx, "worker.run_once", oteltrace.WithSpanKind(oteltrace.SpanKindInternal))
 	defer span.End()
+	defer r.emitHeartbeat(ctx, heartbeatAt, span)
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err := fmt.Errorf("worker panic injected: %v", recovered)
@@ -91,4 +95,27 @@ func (r *Runner) runOnce(ctx context.Context) {
 		return
 	}
 	r.cfg.Metrics.RecordWorkerProcessed(ctx, "tick")
+}
+
+func (r *Runner) emitHeartbeat(ctx context.Context, at time.Time, span oteltrace.Span) {
+	r.cfg.Metrics.RecordHeartbeat(ctx, "worker", at)
+	span.AddEvent("heartbeat.tick", oteltrace.WithAttributes(
+		attribute.String("heartbeat.source", "worker"),
+		attribute.Int64("heartbeat.unix", at.Unix()),
+	))
+
+	if r.cfg.HeartbeatLogInterval <= 0 {
+		return
+	}
+	if !r.lastHeartbeatLog.IsZero() && at.Sub(r.lastHeartbeatLog) < r.cfg.HeartbeatLogInterval {
+		return
+	}
+
+	attrs := append([]slog.Attr{
+		slog.String("heartbeat_source", "worker"),
+		slog.String("code_location", "internal/worker/runner.go:emitHeartbeat"),
+		slog.Time("heartbeat_at", at),
+	}, telemetry.TraceLogAttrs(ctx)...)
+	r.cfg.Logger.LogAttrs(ctx, slog.LevelInfo, "telemetry heartbeat", attrs...)
+	r.lastHeartbeatLog = at
 }

@@ -7,46 +7,58 @@ import (
 )
 
 type Config struct {
-	ServiceName       string
-	Environment       string
-	Version           string
-	CommitSHA         string
-	BuildID           string
-	ListenAddr        string
-	AdminToken        string
-	DBPath            string
-	LogLevel          string
-	Token             string
-	OTLPEndpoint      string
-	EnableTraces      bool
-	EnableMetrics     bool
-	EnableLogs        bool
-	NetHostIP         string
-	PaymentLatencyMS  int
-	OrderTimeoutSec   int
-	WorkerIntervalSec int
+	ServiceName             string
+	Environment             string
+	Version                 string
+	CommitSHA               string
+	BuildID                 string
+	ListenAddr              string
+	AdminToken              string
+	DBPath                  string
+	LogLevel                string
+	Token                   string
+	OTLPEndpoint            string
+	OTLPInsecure            bool
+	EnableTraces            bool
+	EnableMetrics           bool
+	EnableLogs              bool
+	OTLPExportIntervalSec   int
+	OTLPExportTimeoutMS     int
+	OTLPTraceBatchTimeoutMS int
+	OTLPLogBatchTimeoutMS   int
+	NetHostIP               string
+	PaymentLatencyMS        int
+	OrderTimeoutSec         int
+	WorkerIntervalSec       int
+	HeartbeatLogIntervalSec int
 }
 
 func LoadConfigFromEnv() Config {
 	return Config{
-		ServiceName:       getEnv("SERVICE_NAME", "xdom"),
-		Environment:       getEnv("ENVIRONMENT", "dev"),
-		Version:           getEnv("VERSION", "0.1.0"),
-		CommitSHA:         getEnv("COMMIT_SHA", "unknown"),
-		BuildID:           getEnv("BUILD_ID", "local"),
-		ListenAddr:        getEnv("LISTEN_ADDR", ":8080"),
-		AdminToken:        getEnv("ADMIN_TOKEN", "xdom-admin-token"),
-		DBPath:            getEnv("DB_PATH", "data/xdom.db"),
-		LogLevel:          getEnv("LOG_LEVEL", "info"),
-		Token:             getEnv("TOKEN", ""),
-		OTLPEndpoint:      trimScheme(getEnv("OTLP_ENDPOINT", "")),
-		EnableTraces:      getBoolEnv("ENABLE_TRACES", true),
-		EnableMetrics:     getBoolEnv("ENABLE_METRICS", true),
-		EnableLogs:        getBoolEnv("ENABLE_LOGS", true),
-		NetHostIP:         getEnv("NET_HOST_IP", ""),
-		PaymentLatencyMS:  getIntEnv("PAYMENT_LATENCY_MS", 150),
-		OrderTimeoutSec:   getIntEnv("ORDER_TIMEOUT_SEC", 30),
-		WorkerIntervalSec: getIntEnv("WORKER_INTERVAL_SEC", 10),
+		ServiceName:             getEnv("SERVICE_NAME", "xdom"),
+		Environment:             getEnv("ENVIRONMENT", "dev"),
+		Version:                 getEnv("VERSION", "0.1.0"),
+		CommitSHA:               getEnv("COMMIT_SHA", "unknown"),
+		BuildID:                 getEnv("BUILD_ID", "local"),
+		ListenAddr:              getEnv("LISTEN_ADDR", ":8080"),
+		AdminToken:              getEnv("ADMIN_TOKEN", "xdom-admin-token"),
+		DBPath:                  getEnv("DB_PATH", "data/xdom.db"),
+		LogLevel:                getEnv("LOG_LEVEL", "info"),
+		Token:                   getEnv("TOKEN", ""),
+		OTLPEndpoint:            trimScheme(getEnv("OTLP_ENDPOINT", "")),
+		OTLPInsecure:            getBoolEnv("OTLP_INSECURE", true),
+		EnableTraces:            getBoolEnv("ENABLE_TRACES", true),
+		EnableMetrics:           getBoolEnv("ENABLE_METRICS", true),
+		EnableLogs:              getBoolEnv("ENABLE_LOGS", true),
+		OTLPExportIntervalSec:   getIntEnv("OTLP_EXPORT_INTERVAL_SEC", 5),
+		OTLPExportTimeoutMS:     getIntEnv("OTLP_EXPORT_TIMEOUT_MS", 5000),
+		OTLPTraceBatchTimeoutMS: getIntEnv("OTLP_TRACE_BATCH_TIMEOUT_MS", 2000),
+		OTLPLogBatchTimeoutMS:   getIntEnv("OTLP_LOG_BATCH_TIMEOUT_MS", 2000),
+		NetHostIP:               getEnv("NET_HOST_IP", ""),
+		PaymentLatencyMS:        getIntEnv("PAYMENT_LATENCY_MS", 150),
+		OrderTimeoutSec:         getIntEnv("ORDER_TIMEOUT_SEC", 30),
+		WorkerIntervalSec:       getIntEnv("WORKER_INTERVAL_SEC", 10),
+		HeartbeatLogIntervalSec: getIntEnv("HEARTBEAT_LOG_INTERVAL_SEC", 30),
 	}
 }
 

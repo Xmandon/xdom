@@ -8,8 +8,8 @@ import (
 
 	"github.com/Xmandon/xdom/internal/faults"
 	"github.com/Xmandon/xdom/internal/telemetry"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -35,7 +35,7 @@ func NewClient(cfg Config) *Client {
 }
 
 func (c *Client) Charge(ctx context.Context, orderID string, amount float64, channel string) error {
-	ctx, span := c.cfg.Tracer.Start(ctx, "payment.charge")
+	ctx, span := c.cfg.Tracer.Start(ctx, "payment.charge", oteltrace.WithSpanKind(oteltrace.SpanKindClient))
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("order.id", orderID),

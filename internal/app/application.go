@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/Xmandon/xdom/internal/faults"
@@ -28,17 +29,22 @@ func New(cfg Config) (*Application, error) {
 	ctx := context.Background()
 
 	tel, err := telemetry.NewManager(ctx, telemetry.Config{
-		ServiceName:   cfg.ServiceName,
-		Environment:   cfg.Environment,
-		Version:       cfg.Version,
-		CommitSHA:     cfg.CommitSHA,
-		BuildID:       cfg.BuildID,
-		Token:         cfg.Token,
-		OTLPEndpoint:  cfg.OTLPEndpoint,
-		EnableTraces:  cfg.EnableTraces,
-		EnableMetrics: cfg.EnableMetrics,
-		EnableLogs:    cfg.EnableLogs,
-		NetHostIP:     cfg.NetHostIP,
+		ServiceName:       cfg.ServiceName,
+		Environment:       cfg.Environment,
+		Version:           cfg.Version,
+		CommitSHA:         cfg.CommitSHA,
+		BuildID:           cfg.BuildID,
+		Token:             cfg.Token,
+		OTLPEndpoint:      cfg.OTLPEndpoint,
+		OTLPInsecure:      cfg.OTLPInsecure,
+		EnableTraces:      cfg.EnableTraces,
+		EnableMetrics:     cfg.EnableMetrics,
+		EnableLogs:        cfg.EnableLogs,
+		ExportInterval:    time.Duration(cfg.OTLPExportIntervalSec) * time.Second,
+		ExportTimeout:     time.Duration(cfg.OTLPExportTimeoutMS) * time.Millisecond,
+		TraceBatchTimeout: time.Duration(cfg.OTLPTraceBatchTimeoutMS) * time.Millisecond,
+		LogBatchTimeout:   time.Duration(cfg.OTLPLogBatchTimeoutMS) * time.Millisecond,
+		NetHostIP:         cfg.NetHostIP,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init telemetry: %w", err)
@@ -53,13 +59,16 @@ func New(cfg Config) (*Application, error) {
 		Metrics: tel,
 	})
 	if err != nil {
+		_ = tel.Shutdown(ctx)
 		return nil, fmt.Errorf("init repository: %w", err)
 	}
 
 	if err := repo.Init(ctx); err != nil {
+		_ = tel.Shutdown(ctx)
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
 	if err := repo.SeedInventory(ctx); err != nil {
+		_ = tel.Shutdown(ctx)
 		return nil, fmt.Errorf("seed inventory: %w", err)
 	}
 
@@ -94,28 +103,29 @@ func New(cfg Config) (*Application, error) {
 	})
 
 	workerRunner := worker.NewRunner(worker.Config{
-		Interval: time.Duration(cfg.WorkerIntervalSec) * time.Second,
-		Service:  orderService,
-		Logger:   tel.Logger(),
-		Faults:   faultState,
-		Metrics:  tel,
-		Tracer:   tel.Tracer(),
+		Interval:             time.Duration(cfg.WorkerIntervalSec) * time.Second,
+		HeartbeatLogInterval: time.Duration(cfg.HeartbeatLogIntervalSec) * time.Second,
+		Service:              orderService,
+		Logger:               tel.Logger(),
+		Faults:               faultState,
+		Metrics:              tel,
+		Tracer:               tel.Tracer(),
 	})
 
 	handler := httpapi.NewHandler(httpapi.Config{
-		ServiceName: cfg.ServiceName,
-		Environment: cfg.Environment,
-		Version:     cfg.Version,
-		CommitSHA:   cfg.CommitSHA,
-		BuildID:     cfg.BuildID,
-		AdminToken:  cfg.AdminToken,
+		ServiceName:   cfg.ServiceName,
+		Environment:   cfg.Environment,
+		Version:       cfg.Version,
+		CommitSHA:     cfg.CommitSHA,
+		BuildID:       cfg.BuildID,
+		AdminToken:    cfg.AdminToken,
 		EnableTraces:  cfg.EnableTraces,
 		EnableMetrics: cfg.EnableMetrics,
 		EnableLogs:    cfg.EnableLogs,
-		Order:       orderService,
-		Faults:      faultState,
-		Metrics:     tel,
-		Logger:      tel.Logger(),
+		Order:         orderService,
+		Faults:        faultState,
+		Metrics:       tel,
+		Logger:        tel.Logger(),
 	})
 
 	server := &http.Server{
@@ -132,27 +142,53 @@ func New(cfg Config) (*Application, error) {
 	}, nil
 }
 
-func (a *Application) Run(ctx context.Context) error {
+func (a *Application) Run(ctx context.Context) (runErr error) {
 	a.telemetry.Logger().InfoContext(ctx, fmt.Sprintf("starting %s on %s", a.cfg.ServiceName, a.cfg.ListenAddr))
 
 	workerCtx, workerCancel := context.WithCancel(ctx)
 	defer workerCancel()
 	go a.worker.Start(workerCtx)
 
+	var shutdownOnce sync.Once
+	var shutdownErrMu sync.Mutex
+	var shutdownErr error
+	recordShutdownErr := func(err error) {
+		if err == nil {
+			return
+		}
+		shutdownErrMu.Lock()
+		defer shutdownErrMu.Unlock()
+		shutdownErr = errors.Join(shutdownErr, err)
+	}
+	shutdown := func() {
+		shutdownOnce.Do(func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			workerCancel()
+			if err := a.server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				recordShutdownErr(err)
+			}
+			if err := a.telemetry.Shutdown(shutdownCtx); err != nil {
+				recordShutdownErr(err)
+			}
+		})
+	}
+	defer shutdown()
+
 	go func() {
 		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = a.server.Shutdown(shutdownCtx)
-		workerCancel()
-		_ = a.telemetry.Shutdown(shutdownCtx)
+		shutdown()
 	}()
 
 	err := a.server.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+		runErr = errors.Join(runErr, err)
 	}
-	return nil
+	shutdown()
+	shutdownErrMu.Lock()
+	runErr = errors.Join(runErr, shutdownErr)
+	shutdownErrMu.Unlock()
+	return runErr
 }
 
 func LogStartupError(err error) {

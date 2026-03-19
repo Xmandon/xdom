@@ -87,6 +87,22 @@ go run ./cmd/xdom
 - `OTLP_ENDPOINT` 不要带 `http://` 前缀
 - Header 会自动使用 `x-bk-token`
 - `service.name` 会使用 `SERVICE_NAME`
+- 默认会按较短周期持续导出 telemetry，便于在低流量场景下也稳定看到 traces / logs / metrics
+
+可选的持续上报调优项：
+
+- `OTLP_INSECURE`
+- `OTLP_EXPORT_INTERVAL_SEC`
+- `OTLP_EXPORT_TIMEOUT_MS`
+- `OTLP_TRACE_BATCH_TIMEOUT_MS`
+- `OTLP_LOG_BATCH_TIMEOUT_MS`
+- `HEARTBEAT_LOG_INTERVAL_SEC`
+
+当前 trace 语义分层：
+
+- HTTP 入站请求由 `otelhttp` 自动生成 `Server` span
+- 订单编排和 worker 周期任务使用 `Internal` span
+- 模拟支付调用 `payment.charge` 使用 `Client` span
 
 ## 业务指标
 
@@ -101,6 +117,8 @@ go run ./cmd/xdom
 - `payment_timeout_total`
 - `worker_jobs_processed_total`
 - `worker_jobs_failed_total`
+- `service_heartbeat_total`
+- `service_last_heartbeat_unixtime`
 - `active_pending_orders`
 
 ## 部署
@@ -143,3 +161,9 @@ bash scripts/deploy_binary.sh
 接入蓝鲸观测后的验证建议见：
 
 - `docs/blueking_validation.md`
+
+建议额外核对：
+
+- 服务空闲 1-2 分钟时，metrics 仍按 `OTLP_EXPORT_INTERVAL_SEC` 持续刷新
+- 空闲期仍能看到低频 `telemetry heartbeat` 日志
+- 正常下单时 trace 能看到 `Server -> Internal -> Client` 的层次
