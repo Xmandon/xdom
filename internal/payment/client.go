@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -22,6 +23,10 @@ var (
 	ErrTimeout = errors.New("payment timeout")
 	ErrCharge  = errors.New("payment charge failed")
 )
+
+const validationPanicAmount = 999.91
+
+const validationPanicEnvKey = "RCA_VALIDATION_PANIC_ENABLED"
 
 type Config struct {
 	BaseURL        string
@@ -53,6 +58,31 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 		attribute.Float64("payment.amount", amount),
 		attribute.String("server.address", c.cfg.BaseURL),
 	)
+
+	if shouldTriggerValidationPanic(amount, channel) {
+		err := errors.New("payment_charge_failed validation bug")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		span.SetAttributes(
+			attribute.String("error.code", paymentapi.ErrorCodeChargeFailed),
+			attribute.String("validation.mode", "controlled_panic"),
+		)
+		span.AddEvent("payment.validation_panic", oteltrace.WithAttributes(
+			attribute.String("error.code", paymentapi.ErrorCodeChargeFailed),
+			attribute.Float64("payment.amount", amount),
+		))
+		attrs := append([]slog.Attr{
+			slog.String("order_id", orderID),
+			slog.String("payment_channel", channel),
+			slog.String("error_code", paymentapi.ErrorCodeChargeFailed),
+			slog.String("code_location", "internal/payment/client.go:Charge"),
+			slog.String("error", err.Error()),
+			slog.String("validation_mode", "controlled_panic"),
+			slog.Float64("validation_amount", amount),
+		}, telemetry.TraceLogAttrs(ctx)...)
+		c.cfg.Logger.LogAttrs(ctx, slog.LevelError, "payment charge failed", attrs...)
+		panic(err)
+	}
 
 	reqBody, err := json.Marshal(paymentapi.ChargeRequest{
 		OrderID: orderID,
@@ -149,4 +179,11 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 	}, telemetry.TraceLogAttrs(ctx)...)
 	c.cfg.Logger.LogAttrs(ctx, slog.LevelInfo, "payment charged", attrs...)
 	return nil
+}
+
+func shouldTriggerValidationPanic(amount float64, channel string) bool {
+	return strings.EqualFold(os.Getenv(validationPanicEnvKey), "true") &&
+		channel == "mockpay" &&
+		amount >= validationPanicAmount &&
+		amount < validationPanicAmount+0.01
 }
