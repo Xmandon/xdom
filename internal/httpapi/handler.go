@@ -11,6 +11,7 @@ import (
 
 	"github.com/Xmandon/xdom/internal/faults"
 	"github.com/Xmandon/xdom/internal/order"
+	"github.com/Xmandon/xdom/internal/payment"
 	"github.com/Xmandon/xdom/internal/repository"
 	"github.com/Xmandon/xdom/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
@@ -147,7 +148,11 @@ func (h *Handler) handleCreateOrder(_ http.ResponseWriter, r *http.Request) (int
 	if input.PaymentChannel == "" {
 		input.PaymentChannel = "mockpay"
 	}
-	resp, err := h.cfg.Order.CreateOrder(r.Context(), input)
+	ctx := r.Context()
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get(payment.DirectLineBugHeader)), "true") {
+		ctx = payment.WithDirectLineBug(ctx, true)
+	}
+	resp, err := h.cfg.Order.CreateOrder(ctx, input)
 	if err != nil {
 		return http.StatusInternalServerError, map[string]any{"error": err.Error(), "order": resp}
 	}

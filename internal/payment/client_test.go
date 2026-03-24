@@ -31,8 +31,6 @@ func TestChargeValidationPanic(t *testing.T) {
 }
 
 func TestChargeDirectLineBug(t *testing.T) {
-	t.Setenv(directLineBugEnvKey, "true")
-
 	client := NewClient(Config{
 		BaseURL: "http://127.0.0.1:65535",
 		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -46,12 +44,12 @@ func TestChargeDirectLineBug(t *testing.T) {
 		}
 	}()
 
-	_ = client.Charge(context.Background(), "ord-direct-line", directLineBugAmount, "mockpay")
+	ctx := WithDirectLineBug(context.Background(), true)
+	_ = client.Charge(ctx, "ord-direct-line", directLineBugAmount, "mockpay")
 }
 
 func TestChargeSuccessSkipsValidationPanic(t *testing.T) {
 	t.Setenv(validationPanicEnvKey, "false")
-	t.Setenv(directLineBugEnvKey, "false")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

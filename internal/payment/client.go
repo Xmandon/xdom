@@ -30,7 +30,9 @@ const validationPanicEnvKey = "RCA_VALIDATION_PANIC_ENABLED"
 
 const directLineBugAmount = 999.92
 
-const directLineBugEnvKey = "RCA_LINE_BUG_ENABLED"
+const DirectLineBugHeader = "X-RCA-Line-Bug"
+
+type directLineBugContextKey struct{}
 
 type Config struct {
 	BaseURL        string
@@ -88,7 +90,7 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 		panic(err)
 	}
 
-	if shouldTriggerDirectLineBug(amount, channel) {
+	if shouldTriggerDirectLineBug(ctx, amount, channel) {
 		c.triggerDirectLineBug(ctx, span, orderID, amount, channel)
 	}
 
@@ -219,8 +221,13 @@ func shouldTriggerValidationPanic(amount float64, channel string) bool {
 		amount < validationPanicAmount+0.01
 }
 
-func shouldTriggerDirectLineBug(amount float64, channel string) bool {
-	return strings.EqualFold(os.Getenv(directLineBugEnvKey), "true") &&
+func WithDirectLineBug(ctx context.Context, enabled bool) context.Context {
+	return context.WithValue(ctx, directLineBugContextKey{}, enabled)
+}
+
+func shouldTriggerDirectLineBug(ctx context.Context, amount float64, channel string) bool {
+	enabled, _ := ctx.Value(directLineBugContextKey{}).(bool)
+	return enabled &&
 		channel == "mockpay" &&
 		amount >= directLineBugAmount &&
 		amount < directLineBugAmount+0.01
