@@ -112,7 +112,7 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 		requestCtx = timeoutCtx
 	}
 	endpoint := strings.TrimRight(c.cfg.BaseURL, "/") + "/charge"
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(reqBody))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
