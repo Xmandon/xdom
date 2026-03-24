@@ -92,8 +92,8 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 		panic(err)
 	}
 
-	if shouldTriggerDirectLineBug(ctx, amount, channel) {
-		c.triggerDirectLineBug(ctx, span, orderID, amount, channel)
+	if err := c.triggerDirectLineBug(ctx, span, orderID, amount, channel); err != nil {
+		return err
 	}
 
 	if shouldTriggerBackgroundChargeFailed(orderID, channel) {
@@ -213,7 +213,7 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 	return nil
 }
 
-func (c *Client) triggerDirectLineBug(ctx context.Context, span oteltrace.Span, orderID string, amount float64, channel string) {
+func (c *Client) triggerDirectLineBug(ctx context.Context, span oteltrace.Span, orderID string, amount float64, channel string) error {
 	err := errors.New("payment_charge_failed direct line bug")
 	span.RecordError(err)
 	span.SetStatus(codes.Error, err.Error())
@@ -234,6 +234,7 @@ func (c *Client) triggerDirectLineBug(ctx context.Context, span oteltrace.Span, 
 
 	var bug *paymentapi.ChargeResponse
 	_ = bug.Status
+	return ErrCharge
 }
 
 func shouldTriggerValidationPanic(amount float64, channel string) bool {
