@@ -28,6 +28,10 @@ const validationPanicAmount = 999.91
 
 const validationPanicEnvKey = "RCA_VALIDATION_PANIC_ENABLED"
 
+const directLineBugAmount = 999.92
+
+const directLineBugEnvKey = "RCA_LINE_BUG_ENABLED"
+
 type Config struct {
 	BaseURL        string
 	RequestTimeout int
@@ -82,6 +86,10 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 		}, telemetry.TraceLogAttrs(ctx)...)
 		c.cfg.Logger.LogAttrs(ctx, slog.LevelError, "payment charge failed", attrs...)
 		panic(err)
+	}
+
+	if shouldTriggerDirectLineBug(amount, channel) {
+		c.triggerDirectLineBug(ctx, span, orderID, amount, channel)
 	}
 
 	reqBody, err := json.Marshal(paymentapi.ChargeRequest{
@@ -181,9 +189,39 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 	return nil
 }
 
+func (c *Client) triggerDirectLineBug(ctx context.Context, span oteltrace.Span, orderID string, amount float64, channel string) {
+	err := errors.New("payment_charge_failed direct line bug")
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+	span.SetAttributes(
+		attribute.String("error.code", paymentapi.ErrorCodeChargeFailed),
+		attribute.String("validation.mode", "direct_line_bug"),
+	)
+	attrs := append([]slog.Attr{
+		slog.String("order_id", orderID),
+		slog.String("payment_channel", channel),
+		slog.String("error_code", paymentapi.ErrorCodeChargeFailed),
+		slog.String("code_location", "internal/payment/client.go:triggerDirectLineBug"),
+		slog.String("error", err.Error()),
+		slog.String("validation_mode", "direct_line_bug"),
+		slog.Float64("validation_amount", amount),
+	}, telemetry.TraceLogAttrs(ctx)...)
+	c.cfg.Logger.LogAttrs(ctx, slog.LevelError, "payment charge failed", attrs...)
+
+	var bug *paymentapi.ChargeResponse
+	_ = bug.Status
+}
+
 func shouldTriggerValidationPanic(amount float64, channel string) bool {
 	return strings.EqualFold(os.Getenv(validationPanicEnvKey), "true") &&
 		channel == "mockpay" &&
 		amount >= validationPanicAmount &&
 		amount < validationPanicAmount+0.01
+}
+
+func shouldTriggerDirectLineBug(amount float64, channel string) bool {
+	return strings.EqualFold(os.Getenv(directLineBugEnvKey), "true") &&
+		channel == "mockpay" &&
+		amount >= directLineBugAmount &&
+		amount < directLineBugAmount+0.01
 }
