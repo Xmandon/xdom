@@ -30,6 +30,8 @@ const validationPanicEnvKey = "RCA_VALIDATION_PANIC_ENABLED"
 
 const directLineBugAmount = 999.92
 
+const backgroundChargeFailedOrderPrefix = "rca-auto-payment-charge-failed"
+
 const DirectLineBugHeader = "X-RCA-Line-Bug"
 
 type directLineBugContextKey struct{}
@@ -92,6 +94,26 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 
 	if shouldTriggerDirectLineBug(ctx, amount, channel) {
 		c.triggerDirectLineBug(ctx, span, orderID, amount, channel)
+	}
+
+	if shouldTriggerBackgroundChargeFailed(orderID, channel) {
+		span.RecordError(ErrCharge)
+		span.SetStatus(codes.Error, ErrCharge.Error())
+		span.SetAttributes(attribute.String("error.code", paymentapi.ErrorCodeChargeFailed))
+		span.AddEvent("payment.background_probe_error", oteltrace.WithAttributes(
+			attribute.String("error.code", paymentapi.ErrorCodeChargeFailed),
+			attribute.String("probe.kind", "worker_auto_bug"),
+		))
+		attrs := append([]slog.Attr{
+			slog.String("order_id", orderID),
+			slog.String("payment_channel", channel),
+			slog.String("error_code", paymentapi.ErrorCodeChargeFailed),
+			slog.String("code_location", "internal/payment/client.go:Charge"),
+			slog.String("error", ErrCharge.Error()),
+			slog.String("validation_mode", "worker_auto_bug"),
+		}, telemetry.TraceLogAttrs(ctx)...)
+		c.cfg.Logger.LogAttrs(ctx, slog.LevelError, "payment charge failed", attrs...)
+		return ErrCharge
 	}
 
 	reqBody, err := json.Marshal(paymentapi.ChargeRequest{
@@ -231,4 +253,12 @@ func shouldTriggerDirectLineBug(ctx context.Context, amount float64, channel str
 		channel == "mockpay" &&
 		amount >= directLineBugAmount &&
 		amount < directLineBugAmount+0.01
+}
+
+func shouldTriggerBackgroundChargeFailed(orderID string, channel string) bool {
+	return strings.HasPrefix(orderID, backgroundChargeFailedOrderPrefix) && channel == "mockpay"
+}
+
+func BackgroundChargeFailedOrderPrefix() string {
+	return backgroundChargeFailedOrderPrefix
 }

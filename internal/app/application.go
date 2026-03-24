@@ -105,6 +105,7 @@ func New(cfg Config) (*Application, error) {
 		Interval:             time.Duration(cfg.WorkerIntervalSec) * time.Second,
 		HeartbeatLogInterval: time.Duration(cfg.HeartbeatLogIntervalSec) * time.Second,
 		Service:              orderService,
+		PaymentClient:        paymentClient,
 		Logger:               tel.Logger(),
 		Faults:               faultState,
 		Metrics:              tel,
@@ -185,8 +186,8 @@ func (a *Application) Run(ctx context.Context) (runErr error) {
 	}
 	shutdown()
 	shutdownErrMu.Lock()
+	defer shutdownErrMu.Unlock()
 	runErr = errors.Join(runErr, shutdownErr)
-	shutdownErrMu.Unlock()
 	return runErr
 }
 

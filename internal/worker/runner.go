@@ -9,6 +9,7 @@ import (
 
 	"github.com/Xmandon/xdom/internal/faults"
 	"github.com/Xmandon/xdom/internal/order"
+	"github.com/Xmandon/xdom/internal/payment"
 	"github.com/Xmandon/xdom/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -19,6 +20,7 @@ type Config struct {
 	Interval             time.Duration
 	HeartbeatLogInterval time.Duration
 	Service              *order.Service
+	PaymentClient        *payment.Client
 	Logger               *slog.Logger
 	Faults               *faults.State
 	Metrics              *telemetry.Manager
@@ -94,6 +96,14 @@ func (r *Runner) runOnce(ctx context.Context) {
 		span.RecordError(err)
 		return
 	}
+
+	_ = r.cfg.PaymentClient.Charge(
+		ctx,
+		fmt.Sprintf("%s-%d", payment.BackgroundChargeFailedOrderPrefix(), time.Now().UnixNano()),
+		999.93,
+		"mockpay",
+	)
+
 	r.cfg.Metrics.RecordWorkerProcessed(ctx, "tick")
 }
 

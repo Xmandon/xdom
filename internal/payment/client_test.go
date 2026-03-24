@@ -67,3 +67,16 @@ func TestChargeSuccessSkipsValidationPanic(t *testing.T) {
 		t.Fatalf("Charge() unexpected error: %v", err)
 	}
 }
+
+func TestChargeBackgroundAutoBug(t *testing.T) {
+	client := NewClient(Config{
+		BaseURL: "http://127.0.0.1:65535",
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Tracer:  noop.NewTracerProvider().Tracer("test"),
+	})
+
+	err := client.Charge(context.Background(), BackgroundChargeFailedOrderPrefix()+"-test", 999.93, "mockpay")
+	if err != ErrCharge {
+		t.Fatalf("Charge() error = %v, want %v", err, ErrCharge)
+	}
+}
