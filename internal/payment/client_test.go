@@ -69,14 +69,19 @@ func TestChargeSuccessSkipsValidationPanic(t *testing.T) {
 }
 
 func TestChargeBackgroundAutoBug(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"succeeded","authorization_id":"pay-auto-bug-fixed"}`))
+	}))
+	defer server.Close()
+
 	client := NewClient(Config{
-		BaseURL: "http://127.0.0.1:65535",
+		BaseURL: server.URL,
 		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Tracer:  noop.NewTracerProvider().Tracer("test"),
 	})
 
-	err := client.Charge(context.Background(), BackgroundChargeFailedOrderPrefix()+"-test", 999.93, "mockpay")
-	if err != ErrCharge {
-		t.Fatalf("Charge() error = %v, want %v", err, ErrCharge)
+	if err := client.Charge(context.Background(), BackgroundChargeFailedOrderPrefix()+"-test", 999.93, "mockpay"); err != nil {
+		t.Fatalf("Charge() unexpected error: %v", err)
 	}
 }

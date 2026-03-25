@@ -97,23 +97,9 @@ func (c *Client) Charge(ctx context.Context, orderID string, amount float64, cha
 	}
 
 	if shouldTriggerBackgroundChargeFailed(orderID, channel) {
-		span.RecordError(ErrCharge)
-		span.SetStatus(codes.Error, ErrCharge.Error())
-		span.SetAttributes(attribute.String("error.code", paymentapi.ErrorCodeChargeFailed))
-		span.AddEvent("payment.background_probe_error", oteltrace.WithAttributes(
-			attribute.String("error.code", paymentapi.ErrorCodeChargeFailed),
+		span.AddEvent("payment.background_probe_bypassed", oteltrace.WithAttributes(
 			attribute.String("probe.kind", "worker_auto_bug"),
 		))
-		attrs := append([]slog.Attr{
-			slog.String("order_id", orderID),
-			slog.String("payment_channel", channel),
-			slog.String("error_code", paymentapi.ErrorCodeChargeFailed),
-			slog.String("code_location", "internal/payment/client.go:Charge"),
-			slog.String("error", ErrCharge.Error()),
-			slog.String("validation_mode", "worker_auto_bug"),
-		}, telemetry.TraceLogAttrs(ctx)...)
-		c.cfg.Logger.LogAttrs(ctx, slog.LevelError, "payment charge failed", attrs...)
-		return ErrCharge
 	}
 
 	reqBody, err := json.Marshal(paymentapi.ChargeRequest{
